@@ -1,0 +1,13 @@
+option java_package = "com.byhiras.dist.common";
+
+option java_outer_classname = "Common";
+
+message Ping {
+}
+
+message Pong {
+}
+
+service PingPong {
+    rpc Pingit (Ping) returns (Pong);
+}
