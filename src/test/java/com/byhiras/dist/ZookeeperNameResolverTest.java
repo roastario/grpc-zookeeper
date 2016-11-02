@@ -23,7 +23,6 @@ import io.grpc.NameResolver;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
-import io.grpc.util.RoundRobinLoadBalancerFactory;
 
 import com.byhiras.dist.common.Common;
 import com.byhiras.dist.common.PingPongGrpc;
@@ -121,10 +120,11 @@ public class ZookeeperNameResolverTest {
             public String getDefaultScheme() {
                 return "zk";
             }
-        }).usePlaintext(true).loadBalancerFactory(RoundRobinLoadBalancerFactory.getInstance()).build();
+        }).usePlaintext(true).loadBalancerFactory(HealthAwareRoundRobinLoadBalancerFactory.withRoundRobinOnly()).intercept()
+                .build();
         PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);
 
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 100; i++) {
             Common.Pong pong = stub.pingit(Common.Ping.newBuilder().build());
             Assert.assertThat(pong, is(notNullValue()));
         }
@@ -175,7 +175,7 @@ public class ZookeeperNameResolverTest {
         ManagedChannel channel = ManagedChannelBuilder.forTarget("zk://pingPongService")
                 .nameResolverFactory(new ZookeeperNameResolver.ZookeeperNameResolverProvider(zkHost))
                 .usePlaintext(true)
-                .loadBalancerFactory(RoundRobinLoadBalancerFactory.getInstance()).build();
+                .loadBalancerFactory(HealthAwareRoundRobinLoadBalancerFactory.withRoundRobinOnly()).build();
 
         //pingit!
         PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);

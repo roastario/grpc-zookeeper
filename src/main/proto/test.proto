@@ -1,0 +1,14 @@
+syntax = "proto3";
+option java_package = "com.byhiras.dist.test";
+
+option java_outer_classname = "TestObjects";
+
+message Count {
+}
+
+message Counted {
+}
+
+service Counter {
+    rpc CountIt (Count) returns (Counted);
+}

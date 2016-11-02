@@ -1,3 +1,4 @@
+syntax = "proto3";
 option java_package = "com.byhiras.dist.common";
 
 option java_outer_classname = "Common";
