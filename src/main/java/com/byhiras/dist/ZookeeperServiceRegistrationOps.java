@@ -64,7 +64,6 @@ public class ZookeeperServiceRegistrationOps implements Closeable {
     protected List<URI> discover(final String serviceId) throws Exception {
         String znode = ensureNodeForServiceExists(serviceId);
         return getUrisForServiceNode(znode);
-
     }
 
     private List<URI> getUrisForServiceNode(String znode) throws Exception {
@@ -124,7 +123,7 @@ public class ZookeeperServiceRegistrationOps implements Closeable {
     protected boolean removeServiceRegistry(String serviceId) throws Exception {
         String znode = ensureNodeForServiceExists(serviceId);
         try {
-            curatorFramework.delete().deletingChildrenIfNeeded().forPath(znode);
+            curatorFramework.delete().guaranteed().deletingChildrenIfNeeded().forPath(znode);
             return true;
         } catch (Exception e) {
             throw Throwables.propagate(e);

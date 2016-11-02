@@ -53,14 +53,10 @@ public class ZookeeperNameResolverTest {
         Server server = ServerBuilder.forPort(0).addService(new PingPongServiceImpl() {
         }).build();
         server.start();
-
         int serverPort = server.getPort();
-
         ZookeeperServiceRegistrationOps zookeeperServiceRegistrationOps = new ZookeeperServiceRegistrationOps(zkHost);
-
         zookeeperServiceRegistrationOps.removeServiceRegistry("pingPongService");
         zookeeperServiceRegistrationOps.registerService("pingPongService", URI.create("dns://localhost:" + serverPort));
-
         ManagedChannel channel = ManagedChannelBuilder.forTarget("zk://pingPongService").nameResolverFactory(new NameResolver.Factory() {
             @Nullable
             @Override
