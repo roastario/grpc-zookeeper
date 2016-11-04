@@ -32,9 +32,8 @@ import io.grpc.ServerBuilder;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
 
-import com.byhiras.dist.common.Common;
+import com.byhiras.dist.common.Health;
 import com.byhiras.dist.common.PingPongGrpc;
-import com.byhiras.dist.loadbalancing.HealthAwareLoadBalancerFactory;
 import com.byhiras.dist.test.CounterGrpc;
 import com.byhiras.dist.test.TestObjects;
 
@@ -47,7 +46,7 @@ public class HealthAwareRoundRobinLoadBalancerTest {
         return HealthAwareLoadBalancerFactory.withHealthCheckAndRoundRobin((channel) -> {
             try {
                 PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);
-                Common.Pong pong = stub.pingit(Common.Ping.newBuilder().build());
+                Health.Pong pong = stub.pingit(Health.Ping.newBuilder().build());
                 return pong != null;
             } catch (Exception e) {
                 return false;
@@ -151,11 +150,11 @@ public class HealthAwareRoundRobinLoadBalancerTest {
     protected PingPongGrpc.PingPongImplBase getFailingPingPongService(final AtomicBoolean fail) {
         return new PingPongGrpc.PingPongImplBase() {
             @Override
-            public void pingit(Common.Ping request, StreamObserver<Common.Pong> responseObserver) {
+            public void pingit(Health.Ping request, StreamObserver<Health.Pong> responseObserver) {
                 if (fail.get()) {
                     responseObserver.onError(new RuntimeException("oh noes"));
                 } else {
-                    responseObserver.onNext(Common.Pong.getDefaultInstance());
+                    responseObserver.onNext(Health.Pong.getDefaultInstance());
                     responseObserver.onCompleted();
                 }
             }

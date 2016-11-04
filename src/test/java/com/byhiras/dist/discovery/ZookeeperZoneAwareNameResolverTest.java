@@ -21,8 +21,8 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
 
-import com.byhiras.dist.PingPongServiceImpl;
-import com.byhiras.dist.common.Common;
+import com.byhiras.dist.healthchecking.PingPongServiceImpl;
+import com.byhiras.dist.common.Health;
 import com.byhiras.dist.common.PingPongGrpc;
 import com.byhiras.dist.loadbalancing.HealthAwareLoadBalancerFactory;
 
@@ -62,7 +62,7 @@ public class ZookeeperZoneAwareNameResolverTest {
                 )
                 .usePlaintext(true).build();
         PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);
-        Common.Pong pong = stub.pingit(Common.Ping.newBuilder().build());
+        Health.Pong pong = stub.pingit(Health.Ping.newBuilder().build());
         Assert.assertThat(pong, is(notNullValue()));
     }
 
@@ -74,9 +74,9 @@ public class ZookeeperZoneAwareNameResolverTest {
 
         Server server1 = ServerBuilder.forPort(0).addService(new PingPongGrpc.PingPongImplBase() {
             @Override
-            public void pingit(Common.Ping request, StreamObserver<Common.Pong> responseObserver) {
+            public void pingit(Health.Ping request, StreamObserver<Health.Pong> responseObserver) {
                 server1Count.incrementAndGet();
-                responseObserver.onNext(Common.Pong.getDefaultInstance());
+                responseObserver.onNext(Health.Pong.getDefaultInstance());
                 responseObserver.onCompleted();
             }
         }).build();
@@ -86,9 +86,9 @@ public class ZookeeperZoneAwareNameResolverTest {
 
         Server server2 = ServerBuilder.forPort(0).addService(new PingPongGrpc.PingPongImplBase() {
             @Override
-            public void pingit(Common.Ping request, StreamObserver<Common.Pong> responseObserver) {
+            public void pingit(Health.Ping request, StreamObserver<Health.Pong> responseObserver) {
                 server2Count.incrementAndGet();
-                responseObserver.onNext(Common.Pong.getDefaultInstance());
+                responseObserver.onNext(Health.Pong.getDefaultInstance());
                 responseObserver.onCompleted();
             }
         }).build();
@@ -109,7 +109,7 @@ public class ZookeeperZoneAwareNameResolverTest {
         PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);
 
         for (int i = 0; i < 100; i++) {
-            Common.Pong pong = stub.pingit(Common.Ping.newBuilder().build());
+            Health.Pong pong = stub.pingit(Health.Ping.newBuilder().build());
             Assert.assertThat(pong, is(notNullValue()));
         }
 
@@ -128,9 +128,9 @@ public class ZookeeperZoneAwareNameResolverTest {
 
         Server server1 = ServerBuilder.forPort(0).addService(new PingPongGrpc.PingPongImplBase() {
             @Override
-            public void pingit(Common.Ping request, StreamObserver<Common.Pong> responseObserver) {
+            public void pingit(Health.Ping request, StreamObserver<Health.Pong> responseObserver) {
                 server1Count.incrementAndGet();
-                responseObserver.onNext(Common.Pong.getDefaultInstance());
+                responseObserver.onNext(Health.Pong.getDefaultInstance());
                 responseObserver.onCompleted();
             }
         }).build();
@@ -139,9 +139,9 @@ public class ZookeeperZoneAwareNameResolverTest {
         int server1Port = server1.getPort();
         Server server2 = ServerBuilder.forPort(0).addService(new PingPongGrpc.PingPongImplBase() {
             @Override
-            public void pingit(Common.Ping request, StreamObserver<Common.Pong> responseObserver) {
+            public void pingit(Health.Ping request, StreamObserver<Health.Pong> responseObserver) {
                 server2Count.incrementAndGet();
-                responseObserver.onNext(Common.Pong.getDefaultInstance());
+                responseObserver.onNext(Health.Pong.getDefaultInstance());
                 responseObserver.onCompleted();
             }
         }).build();
@@ -166,7 +166,7 @@ public class ZookeeperZoneAwareNameResolverTest {
         //pingit!
         PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);
         for (int i = 0; i < 100; i++) {
-            Common.Pong pong = stub.pingit(Common.Ping.newBuilder().build());
+            Health.Pong pong = stub.pingit(Health.Ping.newBuilder().build());
             Assert.assertThat(pong, is(notNullValue()));
         }
 
@@ -181,7 +181,7 @@ public class ZookeeperZoneAwareNameResolverTest {
 
         //pingit!
         for (int i = 0; i < 100; i++) {
-            Common.Pong pong = stub.pingit(Common.Ping.newBuilder().build());
+            Health.Pong pong = stub.pingit(Health.Ping.newBuilder().build());
             Assert.assertThat(pong, is(notNullValue()));
         }
 

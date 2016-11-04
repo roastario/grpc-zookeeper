@@ -1,8 +1,8 @@
-package com.byhiras.dist;
+package com.byhiras.dist.healthchecking;
 
 import io.grpc.stub.StreamObserver;
 
-import com.byhiras.dist.common.Common;
+import com.byhiras.dist.common.Health;
 import com.byhiras.dist.common.PingPongGrpc;
 
 /**
@@ -12,8 +12,8 @@ public class PingPongServiceImpl extends PingPongGrpc.PingPongImplBase {
 
 
     @Override
-    public void pingit(Common.Ping request, StreamObserver<Common.Pong> responseObserver) {
-        responseObserver.onNext(Common.Pong.newBuilder().build());
+    public void pingit(Health.Ping request, StreamObserver<Health.Pong> responseObserver) {
+        responseObserver.onNext(Health.Pong.newBuilder().build());
         responseObserver.onCompleted();
     }
 }

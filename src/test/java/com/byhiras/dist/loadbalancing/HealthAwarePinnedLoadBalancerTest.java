@@ -18,7 +18,7 @@ import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
 
-import com.byhiras.dist.common.Common;
+import com.byhiras.dist.common.Health;
 import com.byhiras.dist.common.PingPongGrpc;
 import com.byhiras.dist.test.CounterGrpc;
 import com.byhiras.dist.test.TestObjects;
@@ -32,7 +32,7 @@ public class HealthAwarePinnedLoadBalancerTest extends HealthAwareRoundRobinLoad
         return HealthAwareLoadBalancerFactory.withHealthCheckOnly((channel) -> {
             try {
                 PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);
-                Common.Pong pong = stub.pingit(Common.Ping.newBuilder().build());
+                Health.Pong pong = stub.pingit(Health.Ping.newBuilder().build());
                 Assert.assertThat(pong, is(notNullValue()));
                 return pong != null;
             } catch (Exception e) {
