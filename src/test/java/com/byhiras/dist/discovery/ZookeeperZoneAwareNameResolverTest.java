@@ -1,4 +1,4 @@
-package com.byhiras.dist;
+package com.byhiras.dist.discovery;
 
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
@@ -8,7 +8,6 @@ import static org.hamcrest.core.IsNull.notNullValue;
 import java.io.IOException;
 import java.net.URI;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.annotation.Nullable;
 
 import org.apache.curator.test.TestingServer;
 import org.junit.After;
@@ -16,21 +15,21 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import io.grpc.Attributes;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.NameResolver;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.stub.StreamObserver;
 
+import com.byhiras.dist.PingPongServiceImpl;
 import com.byhiras.dist.common.Common;
 import com.byhiras.dist.common.PingPongGrpc;
+import com.byhiras.dist.loadbalancing.HealthAwareLoadBalancerFactory;
 
 /**
  * Author stefanofranz
  */
-public class ZookeeperNameResolverTest {
+public class ZookeeperZoneAwareNameResolverTest {
 
     TestingServer zkTestServer;
     String zkHost;
@@ -44,11 +43,11 @@ public class ZookeeperNameResolverTest {
     @After
     public void stopZookeeper() throws IOException {
         zkTestServer.stop();
+        zkTestServer.close();
     }
 
     @Test
     public void shouldResolveSingleAddress() throws Exception {
-
         Server server = ServerBuilder.forPort(0).addService(new PingPongServiceImpl() {
         }).build();
         server.start();
@@ -56,22 +55,15 @@ public class ZookeeperNameResolverTest {
         ZookeeperServiceRegistrationOps zookeeperServiceRegistrationOps = new ZookeeperServiceRegistrationOps(zkHost);
         zookeeperServiceRegistrationOps.removeServiceRegistry("pingPongService");
         zookeeperServiceRegistrationOps.registerService("pingPongService", URI.create("dns://localhost:" + serverPort));
-        ManagedChannel channel = ManagedChannelBuilder.forTarget("zk://pingPongService").nameResolverFactory(new NameResolver.Factory() {
-            @Nullable
-            @Override
-            public NameResolver newNameResolver(URI targetUri, Attributes params) {
-                return new ZookeeperNameResolver(targetUri, zookeeperServiceRegistrationOps);
-            }
-
-            @Override
-            public String getDefaultScheme() {
-                return "zk";
-            }
-        }).usePlaintext(true).build();
+        ManagedChannel channel = ManagedChannelBuilder.forTarget("zk://pingPongService")
+                .nameResolverFactory(
+                        ZookeeperZoneAwareNameResolverProvider.newBuilder()
+                                .setZookeeperAddress(zkHost).build()
+                )
+                .usePlaintext(true).build();
         PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);
         Common.Pong pong = stub.pingit(Common.Ping.newBuilder().build());
         Assert.assertThat(pong, is(notNullValue()));
-
     }
 
     @Test
@@ -109,18 +101,10 @@ public class ZookeeperNameResolverTest {
         zookeeperServiceRegistrationOps.registerService("pingPongService", URI.create("dns://localhost:" + server1Port));
         zookeeperServiceRegistrationOps.registerService("pingPongService", URI.create("dns://localhost:" + server2Port));
 
-        ManagedChannel channel = ManagedChannelBuilder.forTarget("zk://pingPongService").nameResolverFactory(new NameResolver.Factory() {
-            @Nullable
-            @Override
-            public NameResolver newNameResolver(URI targetUri, Attributes params) {
-                return new ZookeeperNameResolver(targetUri, zookeeperServiceRegistrationOps);
-            }
-
-            @Override
-            public String getDefaultScheme() {
-                return "zk";
-            }
-        }).usePlaintext(true).loadBalancerFactory(HealthAwareRoundRobinLoadBalancerFactory.withRoundRobinOnly()).intercept()
+        ManagedChannel channel = ManagedChannelBuilder.forTarget("zk://pingPongService").nameResolverFactory(
+                ZookeeperZoneAwareNameResolverProvider.newBuilder().setZookeeperAddress(zkHost).build())
+                .usePlaintext(true)
+                .loadBalancerFactory(HealthAwareLoadBalancerFactory.withRoundRobinOnly())
                 .build();
         PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);
 
@@ -173,9 +157,11 @@ public class ZookeeperNameResolverTest {
 
         //build a channel to targeted service
         ManagedChannel channel = ManagedChannelBuilder.forTarget("zk://pingPongService")
-                .nameResolverFactory(new ZookeeperNameResolver.ZookeeperNameResolverProvider(zkHost))
+                .nameResolverFactory(ZookeeperZoneAwareNameResolverProvider.newBuilder()
+                        .setZookeeperAddress(zkHost)
+                        .build())
                 .usePlaintext(true)
-                .loadBalancerFactory(HealthAwareRoundRobinLoadBalancerFactory.withRoundRobinOnly()).build();
+                .loadBalancerFactory(HealthAwareLoadBalancerFactory.withRoundRobinOnly()).build();
 
         //pingit!
         PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);

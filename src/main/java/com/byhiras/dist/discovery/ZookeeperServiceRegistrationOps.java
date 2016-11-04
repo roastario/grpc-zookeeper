@@ -1,10 +1,11 @@
-package com.byhiras.dist;
+package com.byhiras.dist.discovery;
 
 import java.beans.ConstructorProperties;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.URI;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.curator.framework.CuratorFramework;
@@ -26,8 +27,12 @@ public class ZookeeperServiceRegistrationOps implements Closeable {
     private static final String ZK_ROOT = "/services";
     private static final String ZK_DELIMETER = "/";
     protected final static Logger LOGGER = LoggerFactory.getLogger(ZookeeperServiceRegistrationOps.class);
+    public static final String ZONE_DELIMITER_REGEX = "\\|\\*\\*\\|";
+    public static final String ZONE_DELIMITER = "|**|";
 
     private CuratorFramework curatorFramework;
+
+    private final static String UNKNOWN_ZONE = "UNKN";
 
 
     @ConstructorProperties({"address"})
@@ -36,13 +41,16 @@ public class ZookeeperServiceRegistrationOps implements Closeable {
         curatorFramework.start();
     }
 
-    protected void registerService(final String serviceId, final URI endpointURI) throws Exception {
+    protected void registerService(final String serviceId, final URI endpointURI, final String zone) throws Exception {
         String znode = ensureNodeForServiceExists(serviceId);
         curatorFramework
                 .create()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-                .forPath(znode + ZK_DELIMETER, endpointURI.toASCIIString().getBytes());
+                .forPath(znode + ZK_DELIMETER, (endpointURI.toASCIIString()+ ZONE_DELIMITER +zone).getBytes());
+    }
 
+    protected void registerService(final String serviceId, final URI endpointURI) throws Exception {
+        registerService(serviceId, endpointURI, UNKNOWN_ZONE);
     }
 
     private String ensureNodeForServiceExists(String serviceId) throws Exception {
@@ -61,13 +69,21 @@ public class ZookeeperServiceRegistrationOps implements Closeable {
         return znode;
     }
 
-    protected List<URI> discover(final String serviceId) throws Exception {
+    protected List<HostandZone> discover(final String serviceId) throws Exception {
         String znode = ensureNodeForServiceExists(serviceId);
         return getUrisForServiceNode(znode);
     }
 
-    private List<URI> getUrisForServiceNode(String znode) throws Exception {
-        return getServicesForNode(znode).stream().map(URI::create).collect(Collectors.toList());
+    protected List<URI> discoverUnzoned(final String serviceId) throws Exception {
+        String znode = ensureNodeForServiceExists(serviceId);
+        return getUrisForServiceNode(znode).stream().map(HostandZone::getHostURI).collect(Collectors.toList());
+    }
+
+    private List<HostandZone> getUrisForServiceNode(String znode) throws Exception {
+        return getServicesForNode(znode).stream().map(storedString -> {
+            String[] split = storedString.split(ZONE_DELIMITER_REGEX);
+            return new HostandZone(URI.create(split[0]), split[1]);
+        }).collect(Collectors.toList());
     }
 
     private List<String> getServicesForNode(String znode) throws Exception {
@@ -82,13 +98,13 @@ public class ZookeeperServiceRegistrationOps implements Closeable {
         }).map(String::new).collect(Collectors.toList());
     }
 
-    protected boolean deregister(final String serviceId, final URI uriToDeregister) throws Exception {
+    protected boolean deregister(final String serviceId, final URI uriToDeregister, final String zone) throws Exception {
         String znode = ensureNodeForServiceExists(serviceId);
         List<String> children = curatorFramework.getChildren().forPath(znode);
         children.stream().forEach(child -> {
             try {
                 String storedUri = new String(curatorFramework.getData().forPath(znode + ZK_DELIMETER + child));
-                if (storedUri.equals(uriToDeregister.toASCIIString())) {
+                if (storedUri.equals(uriToDeregister.toASCIIString()+ZONE_DELIMITER+zone)) {
                     curatorFramework.delete().forPath(znode + ZK_DELIMETER + child);
                 }
             } catch (Exception e) {
@@ -96,6 +112,10 @@ public class ZookeeperServiceRegistrationOps implements Closeable {
             }
         });
         return true;
+    }
+
+    protected boolean deregister(final String serviceId, final URI uriToDeregister) throws Exception {
+        return deregister(serviceId, uriToDeregister, UNKNOWN_ZONE);
     }
 
     protected boolean watchForUpdates(final String serviceId, ServiceStateListener listener) throws Exception {
@@ -131,11 +151,51 @@ public class ZookeeperServiceRegistrationOps implements Closeable {
     }
 
     public interface ServiceStateListener {
-        void update(List<URI> newList);
+        void update(List<HostandZone> newList);
     }
 
     @Override
     public void close() throws IOException {
         curatorFramework.close();
+    }
+
+    public static class HostandZone{
+        private final URI hostURI;
+        private final String zone;
+
+        public HostandZone(URI hostURI, String zone) {
+            this.hostURI = hostURI;
+            this.zone = zone;
+        }
+
+        public String getZone() {
+            return zone;
+        }
+
+        public URI getHostURI() {
+            return hostURI;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            HostandZone that = (HostandZone) o;
+            return Objects.equals(hostURI, that.hostURI) &&
+                    Objects.equals(zone, that.zone);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(zone, hostURI);
+        }
+
+        @Override
+        public String toString() {
+            return "HostandZone{" +
+                    "hostURI=" + hostURI +
+                    ", zone='" + zone + '\'' +
+                    '}';
+        }
     }
 }

@@ -1,4 +1,4 @@
-package com.byhiras.dist;
+package com.byhiras.dist.loadbalancing;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
@@ -6,7 +6,6 @@ import static java.util.Collections.singletonList;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.core.Is.is;
-import static org.hamcrest.core.IsNull.notNullValue;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -15,12 +14,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Test;
 
 import io.grpc.Attributes;
+import io.grpc.LoadBalancer;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.NameResolver;
@@ -32,6 +34,7 @@ import io.grpc.stub.StreamObserver;
 
 import com.byhiras.dist.common.Common;
 import com.byhiras.dist.common.PingPongGrpc;
+import com.byhiras.dist.loadbalancing.HealthAwareLoadBalancerFactory;
 import com.byhiras.dist.test.CounterGrpc;
 import com.byhiras.dist.test.TestObjects;
 
@@ -40,19 +43,32 @@ import com.byhiras.dist.test.TestObjects;
  */
 public class HealthAwareRoundRobinLoadBalancerTest {
 
+    private static final Supplier<LoadBalancer.Factory> FACTORY_SUPPLIER = () -> {
+        return HealthAwareLoadBalancerFactory.withHealthCheckAndRoundRobin((channel) -> {
+            try {
+                PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);
+                Common.Pong pong = stub.pingit(Common.Ping.newBuilder().build());
+                return pong != null;
+            } catch (Exception e) {
+                return false;
+            }
+
+        }, 5, TimeUnit.MILLISECONDS);
+    };
+
     @Test
     public void shouldFilterOutAddressesWhichFailThePredicate() throws Exception {
 
-        TestServerSetup testServerSetup = new TestServerSetup().invoke();
+        TestServerSetup testServerSetup = new TestServerSetup().invoke(FACTORY_SUPPLIER);
         AtomicBoolean server2Fail = testServerSetup.getServer2Fail();
         AtomicInteger server1Count = testServerSetup.getServer1Count();
         AtomicInteger server2Count = testServerSetup.getServer2Count();
         ManagedChannel requestChannel = testServerSetup.getRequestChannel();
-
         CounterGrpc.CounterBlockingStub counterBlockingStub = CounterGrpc.newBlockingStub(requestChannel);
 
-        for (int i = 0; i < 500; i++) {
-            counterBlockingStub.countIt(TestObjects.Count.getDefaultInstance());
+        while (server1Count.get() < 500 && server2Count.get() < 500) {
+            TestObjects.Counted counted = counterBlockingStub.countIt(TestObjects.Count.getDefaultInstance());
+            Assert.assertThat(counted , is(Matchers.notNullValue()));
         }
 
         float weightedDifference = Math.abs(server1Count.get() - server2Count.get()) / ((float) server1Count.get() + server2Count.get());
@@ -68,11 +84,12 @@ public class HealthAwareRoundRobinLoadBalancerTest {
         Assert.assertThat(weightedDifferenceFailingServer2, is(greaterThan(0.8f)));
         Assert.assertThat(server1Count.get(), is(greaterThan(server2Count.get())));
 
+        requestChannel.shutdownNow();
     }
 
     @Test(expected = StatusRuntimeException.class)
     public void shouldThrowUnavailableExceptionWhenAllEndPointsAreFailing() throws Exception {
-        TestServerSetup testServerSetup = new TestServerSetup().invoke();
+        TestServerSetup testServerSetup = new TestServerSetup().invoke(FACTORY_SUPPLIER);
         AtomicBoolean server1Fail = testServerSetup.getServer1Fail();
         AtomicBoolean server2Fail = testServerSetup.getServer2Fail();
         ManagedChannel requestChannel = testServerSetup.getRequestChannel();
@@ -82,9 +99,11 @@ public class HealthAwareRoundRobinLoadBalancerTest {
         for (int i = 0; i < 500; i++) {
             counterBlockingStub.countIt(TestObjects.Count.getDefaultInstance());
         }
+
+        requestChannel.shutdownNow();
     }
 
-    private ManagedChannel getChannelToServers(final int server1Port, final int server2Port, HealthAwareRoundRobinLoadBalancerFactory unitFactory) {
+    protected ManagedChannel getChannelToServers(final int server1Port, final int server2Port, LoadBalancer.Factory unitFactory) {
         return ManagedChannelBuilder.forTarget("DumDiDum://ignored").nameResolverFactory(new NameResolver.Factory() {
             @Nullable
             @Override
@@ -119,27 +138,17 @@ public class HealthAwareRoundRobinLoadBalancerTest {
         }).loadBalancerFactory(unitFactory).usePlaintext(true).build();
     }
 
-    private HealthAwareRoundRobinLoadBalancerFactory getLoadBalancerFactory() {
-        return HealthAwareRoundRobinLoadBalancerFactory.withHealthChecker((channel) -> {
-            try {
-                PingPongGrpc.PingPongBlockingStub stub = PingPongGrpc.newBlockingStub(channel);
-                Common.Pong pong = stub.pingit(Common.Ping.newBuilder().build());
-                Assert.assertThat(pong, is(notNullValue()));
-                return pong != null;
-            } catch (Exception e) {
-                return false;
-            }
 
-        }, 1, TimeUnit.MILLISECONDS);
-    }
 
-    private void resetCounters(AtomicInteger... counts) {
+
+
+    protected void resetCounters(AtomicInteger... counts) {
         for (AtomicInteger count : counts) {
             count.set(0);
         }
     }
 
-    private PingPongGrpc.PingPongImplBase getFailingPingPongService(final AtomicBoolean fail) {
+    protected PingPongGrpc.PingPongImplBase getFailingPingPongService(final AtomicBoolean fail) {
         return new PingPongGrpc.PingPongImplBase() {
             @Override
             public void pingit(Common.Ping request, StreamObserver<Common.Pong> responseObserver) {
@@ -153,7 +162,7 @@ public class HealthAwareRoundRobinLoadBalancerTest {
         };
     }
 
-    private CounterGrpc.CounterImplBase getCountingService(final AtomicInteger integer) {
+    protected CounterGrpc.CounterImplBase getCountingService(final AtomicInteger integer) {
         return new CounterGrpc.CounterImplBase() {
             @Override
             public void countIt(TestObjects.Count request, StreamObserver<TestObjects.Counted> responseObserver) {
@@ -164,12 +173,12 @@ public class HealthAwareRoundRobinLoadBalancerTest {
         };
     }
 
-    private class TestServerSetup {
-        private AtomicInteger server1Count;
-        private AtomicBoolean server1Fail;
-        private AtomicInteger server2Count;
-        private AtomicBoolean server2Fail;
-        private ManagedChannel requestChannel;
+    protected class TestServerSetup {
+        protected AtomicInteger server1Count;
+        protected AtomicBoolean server1Fail;
+        protected AtomicInteger server2Count;
+        protected AtomicBoolean server2Fail;
+        protected ManagedChannel requestChannel;
 
         public AtomicInteger getServer1Count() {
             return server1Count;
@@ -191,7 +200,7 @@ public class HealthAwareRoundRobinLoadBalancerTest {
             return requestChannel;
         }
 
-        public TestServerSetup invoke() throws IOException {
+        public TestServerSetup invoke(Supplier<LoadBalancer.Factory> factorySupplier) throws IOException {
             server1Count = new AtomicInteger(0);
             server1Fail = new AtomicBoolean(false);
             Server server1 = ServerBuilder.forPort(0)
@@ -210,9 +219,11 @@ public class HealthAwareRoundRobinLoadBalancerTest {
             server2.start();
             int server2Port = server2.getPort();
 
-            HealthAwareRoundRobinLoadBalancerFactory unitFactory = getLoadBalancerFactory();
+            LoadBalancer.Factory unitFactory = (factorySupplier).get();
             requestChannel = getChannelToServers(server1Port, server2Port, unitFactory);
             return this;
         }
     }
+
+
 }

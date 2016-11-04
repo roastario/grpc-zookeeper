@@ -1,10 +1,12 @@
-package com.byhiras.dist;
+package com.byhiras.dist.discovery;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -14,20 +16,26 @@ import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 import io.grpc.ResolvedServerInfo;
 
+import com.byhiras.dist.discovery.ZookeeperServiceRegistrationOps.HostandZone;
 import com.google.common.base.Throwables;
 
 /**
  * Author stefanofranz
  */
-public class ZookeeperNameResolver extends NameResolver {
+public class ZookeeperZoneAwareNameResolver extends NameResolver {
+
+    public final String ZONE_KEY = "ZONE";
 
 
     private final URI targetUri;
     private final ZookeeperServiceRegistrationOps zookeeperServiceRegistry;
+    private final Comparator<HostandZone> zoneComparator;
 
-    public ZookeeperNameResolver(URI targetUri, ZookeeperServiceRegistrationOps zookeeperServiceRegistry) {
+    public ZookeeperZoneAwareNameResolver(URI targetUri, ZookeeperServiceRegistrationOps zookeeperServiceRegistry,
+                                          Comparator<HostandZone> zoneComparator) {
         this.targetUri = targetUri;
         this.zookeeperServiceRegistry = zookeeperServiceRegistry;
+        this.zoneComparator = zoneComparator;
     }
 
 
@@ -38,12 +46,11 @@ public class ZookeeperNameResolver extends NameResolver {
 
     @Override
     public void start(Listener listener) {
-
         //FORMAT WILL BE: zk://serviceName
         String serviceName = targetUri.getAuthority();
 
         try {
-            List<URI> initialDiscovery = zookeeperServiceRegistry.discover(serviceName);
+            List<HostandZone> initialDiscovery = zookeeperServiceRegistry.discover(serviceName);
             List<List<ResolvedServerInfo>> initialServers = convertToResolvedServers(initialDiscovery);
             listener.onUpdate(initialServers, Attributes.EMPTY);
         } catch (Exception e) {
@@ -61,12 +68,14 @@ public class ZookeeperNameResolver extends NameResolver {
 
     }
 
-    private List<List<ResolvedServerInfo>> convertToResolvedServers(List<URI> newList) {
-        return newList.stream().map(uri -> {
+    private List<List<ResolvedServerInfo>> convertToResolvedServers(List<HostandZone> newList) {
+        return newList.stream().sorted(zoneComparator).map(hostandZone -> {
             try {
-                InetAddress[] allByName = InetAddress.getAllByName(uri.getHost());
+                URI hostURI = hostandZone.getHostURI();
+                InetAddress[] allByName = InetAddress.getAllByName(hostURI.getHost());
                 return Arrays.stream(allByName).map(inetAddress ->
-                        new ResolvedServerInfo(new InetSocketAddress(inetAddress, uri.getPort()), Attributes.EMPTY)
+                        new ResolvedServerInfo(new InetSocketAddress(inetAddress, hostURI.getPort()),
+                                Attributes.newBuilder().set(Attributes.Key.of(ZONE_KEY), hostandZone.getZone()).build())
                 ).collect(Collectors.toList());
             } catch (UnknownHostException e) {
                 throw Throwables.propagate(e);
@@ -76,37 +85,11 @@ public class ZookeeperNameResolver extends NameResolver {
 
     @Override
     public void shutdown() {
-
-    }
-
-    public static class ZookeeperNameResolverProvider extends NameResolverProvider {
-
-        private static final String SCHEME = "zk";
-        private final String zookeeperAddress;
-
-        public ZookeeperNameResolverProvider(String zookeeperAddress) {
-            this.zookeeperAddress = zookeeperAddress;
-        }
-
-        @Override
-        protected boolean isAvailable() {
-            return true;
-        }
-
-        @Override
-        protected int priority() {
-            return 5;
-        }
-
-        @Nullable
-        @Override
-        public NameResolver newNameResolver(URI targetUri, Attributes params) {
-            return new ZookeeperNameResolver(targetUri, new ZookeeperServiceRegistrationOps(zookeeperAddress));
-        }
-
-        @Override
-        public String getDefaultScheme() {
-            return SCHEME;
+        try {
+            zookeeperServiceRegistry.close();
+        } catch (IOException e) {
+            throw Throwables.propagate(e);
         }
     }
+
 }
