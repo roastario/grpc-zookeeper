@@ -91,11 +91,6 @@
             <version>2.9.1</version>
             <scope>test</scope>
         </dependency>
-
-
-
-
-
     </dependencies>
 
     <build>
@@ -184,14 +179,11 @@
                                     <outputDirectory>${project.reporting.outputDirectory}/jacoco-ut</outputDirectory>
                                 </configuration>
                             </execution>
-
                         </executions>
                     </plugin>
-
                 </plugins>
             </build>
         </profile>
     </profiles>
-
 
 </project>
