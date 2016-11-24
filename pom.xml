@@ -161,6 +161,7 @@
                         <executions>
                             <execution>
                                 <id>pre-unit-test</id>
+                                <phase>test-compile</phase>
                                 <goals>
                                     <goal>prepare-agent</goal>
                                 </goals>
