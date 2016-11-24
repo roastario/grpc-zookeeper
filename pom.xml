@@ -161,7 +161,6 @@
                                     <goal>prepare-agent</goal>
                                 </goals>
                                 <configuration>
-                                    <!-- Sets the path to the file which contains the execution data. -->
                                     <destFile>${sonar.jacoco.reportPath}</destFile>
                                 </configuration>
                             </execution>
