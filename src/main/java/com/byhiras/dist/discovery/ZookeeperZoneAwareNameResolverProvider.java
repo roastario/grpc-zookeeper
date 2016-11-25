@@ -49,6 +49,21 @@ public class ZookeeperZoneAwareNameResolverProvider extends NameResolverProvider
         return new Builder();
     }
 
+    @VisibleForTesting
+    static Comparator<ZookeeperServiceRegistrationOps.HostandZone> getZoneComparator(final String zoneToPrefer) {
+        return (o1, o2) -> {
+            if (zoneToPrefer.equals(o1.getZone()) && zoneToPrefer.equals(o2.getZone())) {
+                return o1.getHostURI().compareTo(o2.getHostURI());
+            } else if (zoneToPrefer.equals(o1.getZone()) && !zoneToPrefer.equals(o2.getZone())) {
+                return -1;
+            } else if (!zoneToPrefer.equals(o1.getZone()) && zoneToPrefer.equals(o2.getZone())) {
+                return 1;
+            } else {
+                return o1.getHostURI().compareTo(o2.getHostURI());
+            }
+        };
+    }
+
     public static class Builder {
         private String zookeeperAddress;
         private String zoneToPrefer;
@@ -72,21 +87,6 @@ public class ZookeeperZoneAwareNameResolverProvider extends NameResolverProvider
                 comparator = Comparator.comparing(hostandZone -> hostandZone.getHostURI().getHost(), Comparator.naturalOrder());
             }
             return new ZookeeperZoneAwareNameResolverProvider(zookeeperAddress, comparator);
-        }
-
-        @VisibleForTesting
-        static Comparator<ZookeeperServiceRegistrationOps.HostandZone> getZoneComparator(final String zoneToPrefer) {
-            return (o1, o2) -> {
-                if (zoneToPrefer.equals(o1.getZone()) && zoneToPrefer.equals(o2.getZone())) {
-                    return o1.getHostURI().compareTo(o2.getHostURI());
-                } else if (zoneToPrefer.equals(o1.getZone()) && !zoneToPrefer.equals(o2.getZone())) {
-                    return -1;
-                } else if (!zoneToPrefer.equals(o1.getZone()) && zoneToPrefer.equals(o2.getZone())) {
-                    return 1;
-                } else {
-                    return o1.getHostURI().compareTo(o2.getHostURI());
-                }
-            };
         }
     }
 }
