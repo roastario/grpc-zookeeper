@@ -8,6 +8,8 @@ import io.grpc.Attributes;
 import io.grpc.NameResolver;
 import io.grpc.NameResolverProvider;
 
+import com.google.common.annotations.VisibleForTesting;
+
 /**
  * Author stefanofranz
  */
@@ -65,24 +67,26 @@ public class ZookeeperZoneAwareNameResolverProvider extends NameResolverProvider
         public NameResolverProvider build() {
             Comparator<ZookeeperServiceRegistrationOps.HostandZone> comparator;
             if (zoneToPrefer != null) {
-                comparator = new Comparator<ZookeeperServiceRegistrationOps.HostandZone>() {
-                    @Override
-                    public int compare(ZookeeperServiceRegistrationOps.HostandZone o1, ZookeeperServiceRegistrationOps.HostandZone o2) {
-                        if (zoneToPrefer.equals(o1.getZone()) && zoneToPrefer.equals(o2.getZone())) {
-                            return o1.getHostURI().compareTo(o2.getHostURI());
-                        } else if (zoneToPrefer.equals(o1.getZone()) && !zoneToPrefer.equals(o2.getZone())) {
-                            return -1;
-                        } else if (!zoneToPrefer.equals(o1.getZone()) && zoneToPrefer.equals(o2.getZone())) {
-                            return 1;
-                        } else {
-                            return o1.getHostURI().compareTo(o2.getHostURI());
-                        }
-                    }
-                };
+                comparator = getZoneComparator(zoneToPrefer);
             } else {
                 comparator = Comparator.comparing(hostandZone -> hostandZone.getHostURI().getHost(), Comparator.naturalOrder());
             }
             return new ZookeeperZoneAwareNameResolverProvider(zookeeperAddress, comparator);
+        }
+
+        @VisibleForTesting
+        static Comparator<ZookeeperServiceRegistrationOps.HostandZone> getZoneComparator(final String zoneToPrefer) {
+            return (o1, o2) -> {
+                if (zoneToPrefer.equals(o1.getZone()) && zoneToPrefer.equals(o2.getZone())) {
+                    return o1.getHostURI().compareTo(o2.getHostURI());
+                } else if (zoneToPrefer.equals(o1.getZone()) && !zoneToPrefer.equals(o2.getZone())) {
+                    return -1;
+                } else if (!zoneToPrefer.equals(o1.getZone()) && zoneToPrefer.equals(o2.getZone())) {
+                    return 1;
+                } else {
+                    return o1.getHostURI().compareTo(o2.getHostURI());
+                }
+            };
         }
     }
 }
