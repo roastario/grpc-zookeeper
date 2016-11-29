@@ -4,7 +4,6 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThan;
 
-import static com.byhiras.dist.discovery.ZookeeperZoneAwareNameResolverProvider.Builder.getZoneComparator;
 
 import java.net.URI;
 import java.util.Comparator;
@@ -22,7 +21,7 @@ public class ZookeeperZoneAwareNameResolverProviderTest {
 
     @Test
     public void comparatorShouldPreferSameZoneHosts() throws Exception {
-        Comparator<HostandZone> zoneComparator = getZoneComparator("testZone");
+        Comparator<HostandZone> zoneComparator = ZookeeperZoneAwareNameResolverProvider.getZoneComparator("testZone");
         int sameZoneFirst = zoneComparator.compare(
                 new HostandZone(URI.create("dns://machine1"), "testZone"),
                 new HostandZone(URI.create("dns://machine1"), "notTestZone")
